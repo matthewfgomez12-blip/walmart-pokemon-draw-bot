@@ -67,10 +67,18 @@ def main():
     print("Active Pokémon drawing candidates:", drawings)
 
     if os.path.exists(STATE_FILE):
-        with open(STATE_FILE, "r") as f:
-            seen = json.load(f)
-    else:
-        seen = []
+    with open(STATE_FILE, "r") as f:
+        seen = json.load(f)
+else:
+    seen = []
+
+# Initialize history without sending alerts.
+if seen == []:
+    with open(STATE_FILE, "w") as f:
+        json.dump(drawings, f, indent=2)
+
+    print("Initial drawing history saved.")
+    return
 
     # First run establishes a baseline without alerts.
     if not os.path.exists(STATE_FILE):
