@@ -1,85 +1,37 @@
 import requests
 from bs4 import BeautifulSoup
-import os
-import json
 
 URL = "https://www.walmart.com/shop/collectibles/draw"
-STATE_FILE = "seen.json"
 
-TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+headers = {
+    "User-Agent": "Mozilla/5.0"
+}
 
+response = requests.get(URL, headers=headers, timeout=30)
 
-def send_telegram(message):
-    if not TOKEN or not CHAT_ID:
-        print("Telegram credentials missing")
-        return
+print("HTTP STATUS:", response.status_code)
 
-    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+soup = BeautifulSoup(response.text, "html.parser")
 
-    requests.post(
-        url,
-        json={
-            "chat_id": CHAT_ID,
-            "text": message
-        },
-        timeout=20
-    ).raise_for_status()
+text = soup.get_text(" ", strip=True)
 
+print("\nPAGE TITLE:")
+print(soup.title.get_text(strip=True) if soup.title else "No title")
 
-def get_drawings():
-    headers = {
-        "User-Agent": "Mozilla/5.0"
-    }
+print("\nPOKEMON REFERENCES:")
 
-    response = requests.get(URL, headers=headers, timeout=30)
-    response.raise_for_status()
+for word in ["Pokemon", "Pokémon", "pokemon"]:
+    print(f"{word}: {text.count(word)}")
 
-    soup = BeautifulSoup(response.text, "html.parser")
+print("\nDRAWING STATUS REFERENCES:")
 
-    drawings = {}
+for phrase in [
+    "Open drawings",
+    "Closed drawings",
+    "Enter drawing",
+    "Drawing results"
+]:
+    print(f"{phrase}: {text.lower().count(phrase.lower())}")
 
-    for a in soup.find_all("a", href=True):
-        text = a.get_text(" ", strip=True)
-
-        if "pokemon" in text.lower() or "pokémon" in text.lower():
-            link = a["href"]
-
-            if link.startswith("/"):
-                link = "https://www.walmart.com" + link
-
-            drawings[link] = text
-
-    return drawings
-
-
-def main():
-    drawings = get_drawings()
-
-    if os.path.exists(STATE_FILE):
-        with open(STATE_FILE) as f:
-            seen = json.load(f)
-    else:
-        seen = []
-
-    new = {
-        link: name
-        for link, name in drawings.items()
-        if link not in seen
-    }
-
-    for link, name in new.items():
-        send_telegram(
-            f"🚨 NEW POKÉMON DRAWING DETECTED!\n\n"
-            f"{name}\n\n"
-            f"🔗 {link}"
-        )
-
-    with open(STATE_FILE, "w") as f:
-        json.dump(list(set(seen) | set(drawings)), f, indent=2)
-
-    print(f"Found {len(drawings)} drawings, {len(new)} new.")
-
-
-if __name__ == "__main__":
-    main()
+print("\nPAGE PREVIEW:")
+print(text[:3000])
