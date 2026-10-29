@@ -8,30 +8,54 @@ headers = {
 }
 
 response = requests.get(URL, headers=headers, timeout=30)
-
-print("HTTP STATUS:", response.status_code)
+response.raise_for_status()
 
 soup = BeautifulSoup(response.text, "html.parser")
 
-text = soup.get_text(" ", strip=True)
+print("HTTP STATUS:", response.status_code)
 
-print("\nPAGE TITLE:")
-print(soup.title.get_text(strip=True) if soup.title else "No title")
+print("\n=== PAGE HEADINGS ===")
 
-print("\nPOKEMON REFERENCES:")
+for heading in soup.find_all(
+    ["h1", "h2", "h3", "h4"]
+):
+    print(
+        heading.name,
+        ":",
+        heading.get_text(" ", strip=True)
+    )
 
-for word in ["Pokemon", "Pokémon", "pokemon"]:
-    print(f"{word}: {text.count(word)}")
+print("\n=== POKEMON PRODUCT LINKS ===")
 
-print("\nDRAWING STATUS REFERENCES:")
+for link in soup.find_all("a", href=True):
 
-for phrase in [
-    "Open drawings",
-    "Closed drawings",
-    "Enter drawing",
-    "Drawing results"
-]:
-    print(f"{phrase}: {text.lower().count(phrase.lower())}")
+    text = link.get_text(" ", strip=True)
 
-print("\nPAGE PREVIEW:")
-print(text[:3000])
+    if "pokemon" in text.lower() or "pokémon" in text.lower():
+
+        print("\nPRODUCT:", text[:250])
+        print("LINK:", link["href"])
+
+        parent = link.parent
+
+        for level in range(3):
+            if parent:
+                print(
+                    f"PARENT {level}:",
+                    parent.get_text(" ", strip=True)[:400]
+                )
+                parent = parent.parent
+
+print("\n=== DRAWING STATUS BUTTONS ===")
+
+for button in soup.find_all("button"):
+
+    text = button.get_text(" ", strip=True)
+
+    if any(
+        word in text.lower()
+        for word in ["enter", "draw", "closed", "open"]
+    ):
+        print("BUTTON:", text[:200])
+
+print("\nDiagnostic complete.")
