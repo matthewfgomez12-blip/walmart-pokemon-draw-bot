@@ -163,7 +163,7 @@ def main():
     seen = load_history()
 
     # First run: establish baseline
-    if len(seen) == 0:
+    if not os.path.exists(STATE_FILE):
 
         print("Initializing drawing history...")
 
