@@ -6,15 +6,22 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: walmart-pokemon-monitor
+  cancel-in-progress: false
 
 jobs:
   monitor:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout main branch
         uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -24,8 +31,64 @@ jobs:
       - name: Install dependencies
         run: pip install requests beautifulsoup4
 
+      - name: Load previous drawing history
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api \
+            "repos/${{ github.repository }}/contents/seen.json?ref=bot-state" \
+            --jq '.content' | base64 -d > seen.json
+
       - name: Run Walmart monitor
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python monitor.py
+
+      - name: Save drawing history
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import base64
+          import json
+          import os
+          import subprocess
+
+          with open("seen.json", "rb") as f:
+              content = base64.b64encode(f.read()).decode()
+
+          repo = os.environ["GITHUB_REPOSITORY"]
+
+          result = subprocess.run(
+              [
+                  "gh", "api",
+                  f"repos/{repo}/contents/seen.json?ref=bot-state",
+                  "--jq", ".sha"
+              ],
+              capture_output=True,
+              text=True,
+              check=True
+          )
+
+          sha = result.stdout.strip()
+
+          payload = json.dumps({
+              "message": "Update Pokémon drawing history",
+              "content": content,
+              "sha": sha,
+              "branch": "bot-state"
+          })
+
+          subprocess.run(
+              [
+                  "gh", "api",
+                  "--method", "PUT",
+                  f"repos/{repo}/contents/seen.json",
+                  "--input", "-"
+              ],
+              input=payload,
+              text=True,
+              check=True
+          )
+          PY
