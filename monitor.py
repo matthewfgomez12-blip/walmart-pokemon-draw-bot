@@ -1,61 +1,25 @@
+import os
 import requests
-from bs4 import BeautifulSoup
 
-URL = "https://www.walmart.com/shop/collectibles/draw"
+TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
+CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
 
-headers = {
-    "User-Agent": "Mozilla/5.0"
-}
+url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
 
-response = requests.get(URL, headers=headers, timeout=30)
+response = requests.post(
+    url,
+    json={
+        "chat_id": CHAT_ID,
+        "text": (
+            "🚨 WALMART POKÉMON BOT TEST 🚨\n\n"
+            "✅ GitHub Actions connected!\n"
+            "✅ Telegram notifications working!\n\n"
+            "🎯 Ready to monitor Walmart drawings."
+        )
+    },
+    timeout=20
+)
+
 response.raise_for_status()
 
-soup = BeautifulSoup(response.text, "html.parser")
-
-print("HTTP STATUS:", response.status_code)
-
-print("\n=== PAGE HEADINGS ===")
-
-for heading in soup.find_all(
-    ["h1", "h2", "h3", "h4"]
-):
-    print(
-        heading.name,
-        ":",
-        heading.get_text(" ", strip=True)
-    )
-
-print("\n=== POKEMON PRODUCT LINKS ===")
-
-for link in soup.find_all("a", href=True):
-
-    text = link.get_text(" ", strip=True)
-
-    if "pokemon" in text.lower() or "pokémon" in text.lower():
-
-        print("\nPRODUCT:", text[:250])
-        print("LINK:", link["href"])
-
-        parent = link.parent
-
-        for level in range(3):
-            if parent:
-                print(
-                    f"PARENT {level}:",
-                    parent.get_text(" ", strip=True)[:400]
-                )
-                parent = parent.parent
-
-print("\n=== DRAWING STATUS BUTTONS ===")
-
-for button in soup.find_all("button"):
-
-    text = button.get_text(" ", strip=True)
-
-    if any(
-        word in text.lower()
-        for word in ["enter", "draw", "closed", "open"]
-    ):
-        print("BUTTON:", text[:200])
-
-print("\nDiagnostic complete.")
+print("Telegram notification sent successfully!")
