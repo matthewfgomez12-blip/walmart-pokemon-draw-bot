@@ -3,6 +3,10 @@ import json
 import requests
 from bs4 import BeautifulSoup
 
+# ==========================================
+# WALMART POKEMON DRAWING MONITOR
+# ==========================================
+
 URL = "https://www.walmart.com/shop/collectibles/draw"
 STATE_FILE = "seen.json"
 
@@ -12,114 +16,197 @@ CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
 KEYWORDS = ["pokemon", "pokémon"]
 
 
+# ==========================================
+# SEND TELEGRAM NOTIFICATION
+# ==========================================
+
 def send_telegram(message):
+
+    telegram_url = (
+        f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+    )
+
     response = requests.post(
-        f"https://api.telegram.org/bot{TOKEN}/sendMessage",
+        telegram_url,
         json={
             "chat_id": CHAT_ID,
             "text": message
         },
         timeout=20
     )
+
     response.raise_for_status()
 
+    print("Telegram notification sent successfully!")
+
+
+# ==========================================
+# CHECK WALMART DRAWINGS
+# ==========================================
 
 def get_drawings():
+
+    headers = {
+        "User-Agent": "Mozilla/5.0"
+    }
+
     response = requests.get(
         URL,
-        headers={"User-Agent": "Mozilla/5.0"},
+        headers=headers,
         timeout=30
     )
+
     response.raise_for_status()
 
-    soup = BeautifulSoup(response.text, "html.parser")
+    soup = BeautifulSoup(
+        response.text,
+        "html.parser"
+    )
 
     drawings = []
+
     closed_section = False
     found_closed_heading = False
 
-    for heading in soup.find_all(["h2", "h3"]):
-        name = heading.get_text(" ", strip=True)
+    headings = soup.find_all(["h2", "h3"])
 
+    for heading in headings:
+
+        name = heading.get_text(
+            " ",
+            strip=True
+        )
+
+        name_lower = name.lower()
+
+        # Detect closed drawing section
         if heading.name == "h2":
-            if "closed drawings" in name.lower():
+
+            if "closed drawings" in name_lower:
+
                 closed_section = True
                 found_closed_heading = True
+
             else:
+
                 closed_section = False
 
+        # Find Pokemon products outside closed section
         if heading.name == "h3" and not closed_section:
-            if any(word in name.lower() for word in KEYWORDS):
+
+            if any(
+                keyword in name_lower
+                for keyword in KEYWORDS
+            ):
+
                 drawings.append(name)
 
+    # Safety check
     if not found_closed_heading:
+
         raise RuntimeError(
-            "Walmart page structure changed: "
-            "Closed drawings heading not found."
+            "Walmart page structure changed. "
+            "Closed drawings section not found."
         )
 
     return list(dict.fromkeys(drawings))
 
 
+# ==========================================
+# LOAD DRAWING HISTORY
+# ==========================================
+
+def load_history():
+
+    if not os.path.exists(STATE_FILE):
+
+        return []
+
+    with open(STATE_FILE, "r") as file:
+
+        return json.load(file)
+
+
+# ==========================================
+# SAVE DRAWING HISTORY
+# ==========================================
+
+def save_history(seen):
+
+    with open(STATE_FILE, "w") as file:
+
+        json.dump(
+            seen,
+            file,
+            indent=2
+        )
+
+
+# ==========================================
+# MAIN MONITOR
+# ==========================================
+
 def main():
+
+    print("Starting Walmart Pokemon Drawing Monitor...")
+
+    # Get current drawings
     drawings = get_drawings()
 
-    print("Active Pokémon drawing candidates:", drawings)
+    print("Pokemon drawing candidates found:", len(drawings))
 
-        if os.path.exists(STATE_FILE):
-        with open(STATE_FILE, "r") as f:
-            seen = json.load(f)
-    else:
-        seen = []
+    for drawing in drawings:
 
-    # Initialize history without sending alerts
-    if seen == []:
-        with open(STATE_FILE, "w") as f:
-            json.dump(drawings, f, indent=2)
+        print("Detected:", drawing)
 
-        print("Initial drawing history saved.")
+    # Load previous history
+    seen = load_history()
+
+    # First run: establish baseline
+    if len(seen) == 0:
+
+        print("Initializing drawing history...")
+
+        save_history(drawings)
+
+        print("Initial history saved.")
+
         return
 
-# Initialize history without sending alerts.
-if seen == []:
-    with open(STATE_FILE, "w") as f:
-        json.dump(drawings, f, indent=2)
-
-    print("Initial drawing history saved.")
-    return
-
-    # First run establishes a baseline without alerts.
-    if not os.path.exists(STATE_FILE):
-        with open(STATE_FILE, "w") as f:
-            json.dump(drawings, f, indent=2)
-
-        print("Initial baseline saved.")
-        return
-
+    # Find new drawings
     new_drawings = [
-        name for name in drawings
-        if name not in seen
+        drawing
+        for drawing in drawings
+        if drawing not in seen
     ]
 
-    for name in new_drawings:
+    print("New drawing candidates:", len(new_drawings))
+
+    # Send notifications
+    for drawing in new_drawings:
+
         message = (
-            "🚨 POSSIBLE NEW WALMART POKÉMON DRAWING!\n\n"
-            f"🎴 {name}\n\n"
+            "🚨 NEW WALMART POKÉMON DRAWING DETECTED!\n\n"
+            f"🎴 {drawing}\n\n"
             "🔗 " + URL + "\n\n"
-            "Check Walmart to confirm entry is open."
+            "⚡ Check Walmart to confirm entry is open!"
         )
 
         send_telegram(message)
-        print("Alert sent:", name)
 
-        seen.append(name)
+        # Add drawing to history
+        seen.append(drawing)
 
-        # Save after each successful alert.
-        with open(STATE_FILE, "w") as f:
-            json.dump(seen, f, indent=2)
+        # Save after successful notification
+        save_history(seen)
 
-    print("Monitoring complete.")
+    print("Monitoring completed successfully!")
 
+
+# ==========================================
+# START BOT
+# ==========================================
 
 if __name__ == "__main__":
+
     main()
